@@ -19,3 +19,4 @@ $ ./boid n # where n is the number of total boids including agents
 
 ## Instructions
 - Press `q` to quit
+- Press `p` to pause/unpause

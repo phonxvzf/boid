@@ -281,6 +281,7 @@ int main(int argc, char** argv) {
   agents[1].position = a_position;
 
   // main loop
+  bool play = true;
   while (running) {
     tick = SDL_GetTicks();
 
@@ -294,52 +295,55 @@ int main(int argc, char** argv) {
           break;
         case SDL_KEYDOWN:
           if (e.key.keysym.sym == SDLK_q) running = false;
+          if (e.key.keysym.sym == SDLK_p) play = !play;
           break;
       }
     }
 
-    // update entities
-    agents[0].accel = (a_position - agents[0].position).normalized() * GRAVITY;
-    agents[1].accel = (b_position - agents[1].position).normalized() * GRAVITY;
-    if (overlap(agents[0], true)) agents[0].velocity = -agents[0].velocity;
-    if (overlap(agents[1], true)) agents[1].velocity = -agents[1].velocity;
-    float dist2[2];
-    for (int i = 0; i < n_followers; ++i) {
-      dist2[0] = vec2::distance2(boids[i].position, agents[0].position);
-      dist2[1] = vec2::distance2(boids[i].position, agents[1].position);
-      boids[i].agent_id = 0;
-      if (dist2[1] < dist2[0]) boids[i].agent_id = 1;
-      boids[i].accel = (agents[boids[i].agent_id].position - boids[i].position).normalized()
-        * GRAVITY * 3.5f;
-      if (overlap(boids[i], true))
-        boids[i].velocity = -boids[i].velocity;
+    if (play) {
+      // update entities
+      agents[0].accel = (a_position - agents[0].position).normalized() * GRAVITY;
+      agents[1].accel = (b_position - agents[1].position).normalized() * GRAVITY;
+      if (overlap(agents[0], true)) agents[0].velocity = -agents[0].velocity;
+      if (overlap(agents[1], true)) agents[1].velocity = -agents[1].velocity;
+      float dist2[2];
+      for (int i = 0; i < n_followers; ++i) {
+        dist2[0] = vec2::distance2(boids[i].position, agents[0].position);
+        dist2[1] = vec2::distance2(boids[i].position, agents[1].position);
+        boids[i].agent_id = 0;
+        if (dist2[1] < dist2[0]) boids[i].agent_id = 1;
+        boids[i].accel = (agents[boids[i].agent_id].position - boids[i].position).normalized()
+          * GRAVITY * 3.5f;
+        if (overlap(boids[i], true))
+          boids[i].velocity = -boids[i].velocity;
 
-      // avoid friend boids
-      for (int j = 0; j < n_followers; ++j) {
-        if (i == j) continue;
-        if (boids[j].agent_id >= 0 && boids[j].agent_id == boids[i].agent_id) {
-          if (vec2::distance2(boids[i].position, boids[j].position) <= pow2(AVOID_RADIUS)) {
-            vec2 acc = (boids[i].position - boids[j].position).normalized() * GRAVITY * 2.5f;
+        // avoid friend boids
+        for (int j = 0; j < n_followers; ++j) {
+          if (i == j) continue;
+          if (boids[j].agent_id >= 0 && boids[j].agent_id == boids[i].agent_id) {
+            if (vec2::distance2(boids[i].position, boids[j].position) <= pow2(AVOID_RADIUS)) {
+              vec2 acc = (boids[i].position - boids[j].position).normalized() * GRAVITY * 2.5f;
+              boids[i].accel += acc;
+              boids[j].accel += -acc;
+            }
+          }
+        }
+
+        // avoid agent boid
+        if (boids[i].agent_id >= 0) {
+          vec2 agent_pos = agents[boids[i].agent_id].position;
+          if (vec2::distance2(boids[i].position, agent_pos) <= pow2(AVOID_RADIUS)){
+            vec2 acc = (boids[i].position - agent_pos).normalized() * GRAVITY * 3.5f;
             boids[i].accel += acc;
-            boids[j].accel += -acc;
+            //agents[boids[i].agent_id].accel += -acc;
           }
         }
       }
 
-      // avoid agent boid
-      if (boids[i].agent_id >= 0) {
-        vec2 agent_pos = agents[boids[i].agent_id].position;
-        if (vec2::distance2(boids[i].position, agent_pos) <= pow2(AVOID_RADIUS)){
-          vec2 acc = (boids[i].position - agent_pos).normalized() * GRAVITY * 3.5f;
-          boids[i].accel += acc;
-          //agents[boids[i].agent_id].accel += -acc;
-        }
-      }
+      // move entities
+      for (int i = 0; i < n_followers; ++i) boids[i].move(dt);
+      for (int i = 0; i < n_agents; ++i) agents[i].move(dt);
     }
-
-    // move entities
-    for (int i = 0; i < n_followers; ++i) boids[i].move(dt);
-    for (int i = 0; i < n_agents; ++i) agents[i].move(dt);
 
     // draw entities
     SDL_Rect r;
