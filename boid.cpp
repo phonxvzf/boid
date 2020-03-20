@@ -7,11 +7,11 @@
 #include <SDL2/SDL_image.h>
 
 #define BOID_RADIUS (8)
-#define BOID_MAX_SPEED (300.f)
+#define BOID_MAX_SPEED (130.f)
 #define GRAVITY (200.f)
 #define SCREEN_SIZE (1024)
-#define FLOCK_RADIUS (100)
-#define AVOID_RADIUS (50)
+#define FLOCK_RADIUS (100.f)
+#define AVOID_RADIUS (50.f)
 
 SDL_Window* window;
 SDL_Renderer* renderer;
@@ -76,6 +76,10 @@ class vec2 {
       return std::sqrt(pow2(x) + pow2(y));
     }
 
+    float size2() const {
+      return pow2(x) + pow2(y);
+    }
+
     vec2 normalized() const {
       float sz = size();
       if (sz > 1e-6f) return vec2(x / sz, y / sz);
@@ -123,8 +127,11 @@ class entity {
       if (position.x > SCREEN_SIZE - BOID_RADIUS || position.x < BOID_RADIUS) velocity.x *= -1.f;
       if (position.y > SCREEN_SIZE - BOID_RADIUS || position.y < BOID_RADIUS) velocity.y *= -1.f;
       velocity += accel * dt;
-      velocity.x = std::min(velocity.x, BOID_MAX_SPEED);
-      velocity.y = std::min(velocity.y, BOID_MAX_SPEED);
+      if (velocity.size2() >= pow2(BOID_MAX_SPEED)) {
+        float angle = std::atan2(velocity.y, velocity.x);
+        velocity.x = BOID_MAX_SPEED * std::cos(angle);
+        velocity.y = BOID_MAX_SPEED * std::sin(angle);
+      }
     }
 
     static bool overlap(const entity& e0, const entity& e1) {
@@ -251,19 +258,6 @@ int main(int argc, char** argv) {
     return false;
   };
 
-  auto near_friend = [&](const boid& b, float r) -> boid* {
-    float r2 = pow2(r);
-    for (int i = 0; i < n_followers; ++i) {
-      if (&b == &boids[i]) continue;
-      if (b.agent_id >= 0 && boids[i].agent_id == b.agent_id) {
-        if (vec2::distance2(b.position, boids[i].position) <= r2) {
-          return &boids[i];
-        }
-      }
-    }
-    return nullptr;
-  };
-
   for (int i = 0; i < 5; ++i) {
     obstacles[i].position = vec2::sample(false) * SCREEN_SIZE;
   }
@@ -320,10 +314,26 @@ int main(int argc, char** argv) {
       if (overlap(boids[i], true))
         boids[i].velocity = -boids[i].velocity;
 
-      boid* friend_boid;
-      if ((friend_boid = near_friend(boids[i], AVOID_RADIUS)) != nullptr) {
-        boids[i].accel += (boids[i].position - friend_boid->position).normalized()
-          * GRAVITY * 2.5f;
+      // avoid friend boids
+      for (int j = 0; j < n_followers; ++j) {
+        if (i == j) continue;
+        if (boids[j].agent_id >= 0 && boids[j].agent_id == boids[i].agent_id) {
+          if (vec2::distance2(boids[i].position, boids[j].position) <= pow2(AVOID_RADIUS)) {
+            vec2 acc = (boids[i].position - boids[j].position).normalized() * GRAVITY * 2.5f;
+            boids[i].accel += acc;
+            boids[j].accel += -acc;
+          }
+        }
+      }
+
+      // avoid agent boid
+      if (boids[i].agent_id >= 0) {
+        vec2 agent_pos = agents[boids[i].agent_id].position;
+        if (vec2::distance2(boids[i].position, agent_pos) <= pow2(AVOID_RADIUS)){
+          vec2 acc = (boids[i].position - agent_pos).normalized() * GRAVITY * 3.5f;
+          boids[i].accel += acc;
+          //agents[boids[i].agent_id].accel += -acc;
+        }
       }
     }
 
